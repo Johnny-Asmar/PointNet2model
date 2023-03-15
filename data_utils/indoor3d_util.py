@@ -2,6 +2,7 @@ import numpy as np
 import glob
 import os
 import sys
+import open3d as o3d
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(BASE_DIR)
@@ -31,7 +32,7 @@ g_label2color = {g_classes.index(cls): g_class2color[cls] for cls in g_classes}
 # CONVERT ORIGINAL DATA TO OUR DATA_LABEL FILES
 # -----------------------------------------------------------------------------
 
-def collect_point_label(anno_path, out_filename, file_format='txt'):
+def collect_point_label(ply_file, out_filename, file_format='txt'):
     """ Convert original dataset files to data_label file (each line is XYZRGBL).
         We aggregated all the points from each instance in the room.
 
@@ -44,31 +45,17 @@ def collect_point_label(anno_path, out_filename, file_format='txt'):
     Note:
         the points are shifted before save, the most negative point is now at origin.
     """
-    points_list = []
-    for f in glob.glob(os.path.join(anno_path, '*.txt')):
-        cls = os.path.basename(f).split('_')[0]
-        print(f)
-        if cls not in g_classes: # note: in some room there is 'staris' class..
-            cls = 'clutter'
+    pcd = o3d.t.io.read_point_cloud(ply_file)
+    positions = pcd.point.positions.numpy()
+    colors  = pcd.point.colors.numpy() * 255
+    label = pcd.point.label0.numpy()
+    points = np.concatenate([positions, colors, label], 1) # Nx7
+    print(points.shape)
+    xyz_min = np.amin(points, axis=0)[0:3]
+    points[:, 0:3] -= xyz_min
 
-        points = np.loadtxt(f)
-        labels = np.ones((points.shape[0],1)) * g_class2label[cls]
-        points_list.append(np.concatenate([points, labels], 1)) # Nx7
-        print(points)
-    data_label = np.concatenate(points_list, 0)
-    xyz_min = np.amin(data_label, axis=0)[0:3]
-    data_label[:, 0:3] -= xyz_min
-    
-    if file_format=='txt':
-        fout = open(out_filename, 'w')
-        for i in range(data_label.shape[0]):
-            fout.write('%f %f %f %d %d %d %d\n' % \
-                          (data_label[i,0], data_label[i,1], data_label[i,2],
-                           data_label[i,3], data_label[i,4], data_label[i,5],
-                           data_label[i,6]))
-        fout.close()
-    elif file_format=='numpy':
-        np.save(out_filename, data_label)
+    if file_format=='numpy':
+        np.save(out_filename, points)
     else:
         print('ERROR!! Unknown file format: %s, please use txt or numpy.' % \
             (file_format))
@@ -137,7 +124,7 @@ def sample_data_label(data, label, num_sample):
     new_label = label[sample_indices]
     return new_data, new_label
     
-def room2blocks(data, label, num_point, block_size=1.0, stride=1.0,
+def room2blocks(data, label, num_point, block_size=30.0, stride=1.0,
                 random_sample=False, sample_num=None, sample_aug=1):
     """ Prepare block training data.
     Args:
@@ -220,7 +207,7 @@ def room2blocks_plus(data_label, num_point, block_size, stride,
     return room2blocks(data, label, num_point, block_size, stride,
                        random_sample, sample_num, sample_aug)
    
-def room2blocks_wrapper(data_label_filename, num_point, block_size=1.0, stride=1.0,
+def room2blocks_wrapper(data_label_filename, num_point, block_size=30.0, stride=1.0,
                         random_sample=False, sample_num=None, sample_aug=1):
     if data_label_filename[-3:] == 'txt':
         data_label = np.loadtxt(data_label_filename)
@@ -259,7 +246,7 @@ def room2blocks_plus_normalized(data_label, num_point, block_size, stride,
     return new_data_batch, label_batch
 
 
-def room2blocks_wrapper_normalized(data_label_filename, num_point, block_size=1.0, stride=1.0,
+def room2blocks_wrapper_normalized(data_label_filename, num_point, block_size=30.0, stride=1.0,
                                    random_sample=False, sample_num=None, sample_aug=1):
     if data_label_filename[-3:] == 'txt':
         data_label = np.loadtxt(data_label_filename)

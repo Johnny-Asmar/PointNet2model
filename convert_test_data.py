@@ -7,6 +7,7 @@ import glob
 
 input_dir = "data/"
 file_name_list = glob.glob(input_dir + "*.pcd")
+print(file_name_list)
 for file_name in file_name_list:
     pcd = o3d.io.read_point_cloud(file_name)
     points = np.asanyarray(pcd.points)

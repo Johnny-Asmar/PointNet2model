@@ -80,6 +80,12 @@ def farthest_point_sample(xyz, npoint):
         dist = torch.sum((xyz - centroid) ** 2, -1)
         mask = dist < distance
         distance[mask] = dist[mask]
+        # try:
+        #     distance[mask] = dist[mask]
+        # except Exception:
+        #     print(f"shape: {xyz.shape}")
+        #     print(f"min: {torch.min(xyz)}  max: {torch.max(xyz)}")
+        #     print(f"max dist: {torch.max(dist)} min dist: {torch.min(dist)}")
         farthest = torch.max(distance, -1)[1]
     return centroids
 
@@ -194,11 +200,16 @@ class PointNetSetAbstraction(nn.Module):
         # new_points: sampled points data, [B, npoint, nsample, C+D]
         new_points = new_points.permute(0, 3, 2, 1) # [B, C+D, nsample,npoint]
         for i, conv in enumerate(self.mlp_convs):
-            bn = self.mlp_bns[i]
-            new_points =  F.relu(bn(conv(new_points)), inplace=True)
+            try:
+                bn = self.mlp_bns[i]
+                new_points =  F.relu(bn(conv(new_points)))
+            except:
+                print('CUDNN error')
 
         new_points = torch.max(new_points, 2)[0]
         new_xyz = new_xyz.permute(0, 2, 1)
+
+
         return new_xyz, new_points
 
 
@@ -253,7 +264,7 @@ class PointNetSetAbstractionMsg(nn.Module):
             for j in range(len(self.conv_blocks[i])):
                 conv = self.conv_blocks[i][j]
                 bn = self.bn_blocks[i][j]
-                grouped_points =  F.relu(bn(conv(grouped_points)), inplace=True)
+                grouped_points =  F.relu(bn(conv(grouped_points)))
             new_points = torch.max(grouped_points, 2)[0]  # [B, D', S]
             new_points_list.append(new_points)
 
@@ -311,6 +322,6 @@ class PointNetFeaturePropagation(nn.Module):
         new_points = new_points.permute(0, 2, 1)
         for i, conv in enumerate(self.mlp_convs):
             bn = self.mlp_bns[i]
-            new_points = F.relu(bn(conv(new_points)), inplace=True)
+            new_points = F.relu(bn(conv(new_points)))
         return new_points
 

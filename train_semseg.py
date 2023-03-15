@@ -22,7 +22,9 @@ ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'models'))
 
 classes = ['ceiling', 'floor', 'wall', 'beam', 'column', 'window', 'door', 'table', 'chair', 'sofa', 'bookcase',
-           'board', 'clutter']
+           'board', 'clutter', 'ceiling1', 'floor1', 'wall1', 'beam1', 'column1', 'window1', 'door1', 'table1', 'chair1', 'sofa1', 'bookcase1',
+           'board1', 'clutter1', 'sofa2', 'bookcase2',
+           'board2', 'clutter2']
 class2label = {cls: i for i, cls in enumerate(classes)}
 seg_classes = class2label
 seg_label_to_cat = {}
@@ -89,14 +91,14 @@ def main(args):
     log_string(args)
 
     root = 'data/stanford_indoor3d/'
-    NUM_CLASSES = 13
+    NUM_CLASSES = 30
     NUM_POINT = args.npoint
     BATCH_SIZE = args.batch_size
 
     print("start loading training data ...")
-    TRAIN_DATASET = S3DISDataset(split='train', data_root=root, num_point=NUM_POINT, test_area=args.test_area, block_size=1.0, sample_rate=1.0, transform=None)
+    TRAIN_DATASET = S3DISDataset(split='train', data_root=root, num_point=NUM_POINT, test_area=args.test_area, block_size=50.0, sample_rate=1.0, transform=None)
     print("start loading test data ...")
-    TEST_DATASET = S3DISDataset(split='test', data_root=root, num_point=NUM_POINT, test_area=args.test_area, block_size=1.0, sample_rate=1.0, transform=None)
+    TEST_DATASET = S3DISDataset(split='test', data_root=root, num_point=NUM_POINT, test_area=args.test_area, block_size=50.0, sample_rate=1.0, transform=None)
 
     trainDataLoader = torch.utils.data.DataLoader(TRAIN_DATASET, batch_size=BATCH_SIZE, shuffle=True, num_workers=10,
                                                   pin_memory=True, drop_last=True,
@@ -126,15 +128,17 @@ def main(args):
             torch.nn.init.xavier_normal_(m.weight.data)
             torch.nn.init.constant_(m.bias.data, 0.0)
 
-    try:
-        checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
-        start_epoch = checkpoint['epoch']
-        classifier.load_state_dict(checkpoint['model_state_dict'])
-        log_string('Use pretrain model')
-    except:
-        log_string('No existing model, starting training from scratch...')
-        start_epoch = 0
-        classifier = classifier.apply(weights_init)
+    # try:
+    #     checkpoint = torch.load(str(experiment_dir) + '/checkpoints/best_model.pth')
+    #     start_epoch = checkpoint['epoch']
+    #     classifier.load_state_dict(checkpoint['model_state_dict'])
+    #     log_string('Use pretrain model')
+    # except:
+    log_string('No existing model, starting training from scratch...')
+    start_epoch = 0
+    classifier = classifier.apply(weights_init)
+
+    CUDA_LAUNCH_BLOCKING=1
 
     if args.optimizer == 'Adam':
         optimizer = torch.optim.Adam(
@@ -187,6 +191,7 @@ def main(args):
             points = points.transpose(2, 1)
 
             seg_pred, trans_feat = classifier(points)
+
             seg_pred = seg_pred.contiguous().view(-1, NUM_CLASSES)
 
             batch_label = target.view(-1, 1)[:, 0].cpu().data.numpy()
@@ -255,6 +260,7 @@ def main(args):
                     total_iou_deno_class[l] += np.sum(((pred_val == l) | (batch_label == l)))
 
             labelweights = labelweights.astype(np.float32) / np.sum(labelweights.astype(np.float32))
+            print(total_iou_deno_class)
             mIoU = np.mean(np.array(total_correct_class) / (np.array(total_iou_deno_class, dtype=np.float) + 1e-6))
             log_string('eval mean loss: %f' % (loss_sum / float(num_batches)))
             log_string('eval point avg class IoU: %f' % (mIoU))
